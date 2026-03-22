@@ -1,0 +1,45 @@
+# === Lens Polishing RL Configuration ===
+
+surface:
+  grid_size: 64
+  lens_diameter_mm: 50.0
+  curvature_radius_mm: 200.0
+  initial_roughness_nm: 200.0
+  target_rms_um: 0.1
+
+tif:
+  ball_diameter_mm: 50.0
+  default_concentration: 5.0
+
+env:
+  max_steps: 200
+  time_budget_s: 600.0
+  reward_weights:
+    form: 5.0
+    roughness: 1.0
+    time_penalty: 0.01
+    completion_bonus: 10.0
+  action_ranges:
+    pressure: [5.0, 50.0]
+    speed: [200.0, 1300.0]
+    dwell_time: [0.1, 5.0]
+
+training:
+  algorithm: SAC
+  total_timesteps: 1000000
+  learning_rate: 0.0001
+  batch_size: 256
+  buffer_size: 100000
+  learning_starts: 2000
+  gamma: 0.99
+  tau: 0.005
+  train_freq: 4
+  gradient_steps: 4
+  log_interval: 10
+  eval_freq: 5000
+  n_eval_episodes: 3
+  seed: 42
+
+policy:
+  cnn_channels: [32, 64]
+  mlp_hidden: [256, 256]

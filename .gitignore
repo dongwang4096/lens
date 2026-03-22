@@ -1,0 +1,7 @@
+*.sqsh
+__pycache__/
+*.pyc
+src/runs/
+src/checkpoints/
+*.egg-info/
+.DS_Store
