@@ -1,8 +1,7 @@
-"""Quick smoke test for the polishing environment."""
+"""Quick smoke test for the spiral polishing environment."""
 
 import sys
 from pathlib import Path
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from env.polishing_env import LensPolishingEnv
@@ -10,39 +9,35 @@ from env.polishing_env import LensPolishingEnv
 
 def main():
     ckpt = Path(__file__).resolve().parents[1] / "checkpoints" / "tif_model.pt"
-
-    env = LensPolishingEnv(
-        grid_size=64,
-        tif_checkpoint=str(ckpt),
-        max_steps=20,
-    )
+    env = LensPolishingEnv(grid_size=128, tif_checkpoint=str(ckpt))
 
     obs, info = env.reset(seed=42)
-    print("Environment created successfully!")
-    print(f"  Obs maps shape: {obs['maps'].shape}")
-    print(f"  Obs scalar shape: {obs['scalar'].shape}")
+    print("Spiral polishing environment created!")
+    print(f"  Obs shape: {obs.shape}")
     print(f"  Action space: {env.action_space}")
-    print(f"  Initial RMS error: {env.initial_rms:.4f} um")
-    print(f"  Initial roughness: {env.prev_roughness:.1f} nm")
+    print(f"  Spiral waypoints: {env.max_steps}")
+    print(f"  Initial RMS: {env.initial_rms:.4f} um")
+    print(f"  Passes: {env.num_passes}, Pressures: {env.pass_pressures}")
+    print(f"  Fixed V={env.fixed_speed}rpm")
 
-    print("\nRunning 10 random steps...")
+    print(f"\nRunning {min(20, env.max_steps)} steps along spiral...")
     total_reward = 0.0
-    for i in range(10):
+    for i in range(min(20, env.max_steps)):
         action = env.action_space.sample()
         obs, reward, terminated, truncated, info = env.step(action)
         total_reward += reward
-        print(
-            f"  Step {i+1}: RMS={info['rms_error']:.4f}um, "
-            f"Ra={info['mean_roughness']:.1f}nm, "
-            f"reward={reward:.4f}, "
-            f"tool=({info['tool_x']:.1f},{info['tool_y']:.1f}), "
-            f"P={info['pressure']:.0f}N, V={info['speed']:.0f}rpm"
-        )
+        if (i + 1) % 5 == 0:
+            print(
+                f"  Step {i+1}: RMS={info['rms_error']:.4f}um, "
+                f"dwell={info['dwell_time']:.2f}s, "
+                f"tool=({info['tool_x']:.1f},{info['tool_y']:.1f}), "
+                f"radial={info['radial_progress']:.1%}"
+            )
         if terminated or truncated:
             break
 
     print(f"\nTotal reward: {total_reward:.4f}")
-    print("Environment test passed!")
+    print("Test passed!")
 
 
 if __name__ == "__main__":

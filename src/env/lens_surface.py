@@ -56,34 +56,44 @@ class LensSurface:
         return self.get_error_map()
 
     def _generate_initial_error(self, rng: np.random.RandomState, scale: float) -> np.ndarray:
-        """Generate a realistic initial form error (in microns).
+        """Generate a non-uniform initial form error (in microns).
 
-        The error is predominantly positive (excess material to be removed)
-        since polishing can only remove material. Combines a positive baseline
-        with low-frequency variation and smooth noise.
-        Typical scale: ~2-5 microns of excess material.
+        Simulates realistic grinding residuals: a thin positive baseline with
+        strong localized bumps, asymmetric lobes, and mid-frequency ripple.
+        Some regions are near-zero while others have 3-5x the average error.
+        This forces RL to learn spatially-adaptive dwell times.
         """
         from scipy.ndimage import gaussian_filter
 
         D = self.lens_diameter_mm
-        x_norm = self.xx / (D / 2)
-        y_norm = self.yy / (D / 2)
+        half = D / 2
+        x_norm = self.xx / half
+        y_norm = self.yy / half
         r_norm = np.sqrt(x_norm**2 + y_norm**2)
 
-        baseline = rng.uniform(1.5, 3.0) * scale
-        radial_var = rng.uniform(0.3, 0.8) * scale * (1 - 0.5 * r_norm**2)
+        baseline = 0.5 * scale
 
-        k1 = rng.uniform(0.5, 1.5)
+        n_bumps = rng.randint(3, 7)
+        bumps = np.zeros_like(self.xx)
+        for _ in range(n_bumps):
+            cx = rng.uniform(-0.7, 0.7)
+            cy = rng.uniform(-0.7, 0.7)
+            amp = rng.uniform(1.5, 4.0) * scale
+            sigma = rng.uniform(0.15, 0.4)
+            bumps += amp * np.exp(-((x_norm - cx)**2 + (y_norm - cy)**2) / (2 * sigma**2))
+
+        k1 = rng.uniform(1.0, 3.0)
+        k2 = rng.uniform(1.5, 4.0)
         phi1 = rng.uniform(0, 2 * np.pi)
         phi2 = rng.uniform(0, 2 * np.pi)
-        A1 = rng.uniform(0.2, 0.5) * scale
-        low_freq = A1 * np.cos(k1 * np.pi * x_norm + phi1) * np.cos(k1 * np.pi * y_norm + phi2)
+        A_asym = rng.uniform(0.5, 1.5) * scale
+        asymmetry = A_asym * np.cos(k1 * np.pi * x_norm + phi1) * np.sin(k2 * np.pi * y_norm + phi2)
 
         noise_raw = rng.randn(self.grid_size, self.grid_size)
-        noise_smooth = gaussian_filter(noise_raw, sigma=max(3, self.grid_size // 20))
-        noise_smooth *= 0.15 * scale / (noise_smooth.std() + 1e-8)
+        noise_smooth = gaussian_filter(noise_raw, sigma=max(3, self.grid_size // 15))
+        noise_smooth *= 0.3 * scale / (noise_smooth.std() + 1e-8)
 
-        error = baseline + radial_var + low_freq + noise_smooth
+        error = baseline + bumps + asymmetry + noise_smooth
         error = np.maximum(error, 0.05 * scale)
         error[~self.mask] = 0.0
         return error
