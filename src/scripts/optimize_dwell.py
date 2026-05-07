@@ -20,6 +20,8 @@ Usage:
     python src/scripts/optimize_dwell.py --pytorch-iters 5000 --pytorch-lr 0.005
 """
 
+from __future__ import annotations
+
 import sys
 from pathlib import Path
 

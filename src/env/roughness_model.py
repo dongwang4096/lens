@@ -5,6 +5,8 @@ parameters. Moderate conditions improve roughness; extreme conditions
 degrade it.
 """
 
+from __future__ import annotations
+
 import numpy as np
 
 

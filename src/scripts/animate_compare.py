@@ -78,7 +78,7 @@ def simulate_episode(surface_template, waypoints, dwells, sigma, depth, mask):
 
 
 def build_snapshots(surface_obj, waypoints, dwells, sigma_arr, depth_arr,
-                    pass_pressures, single_pass_len, num_passes, speed, conc):
+                    waypoint_pressures, speed, conc):
     """Build per-step surface snapshots for one method, including roughness."""
     from env.roughness_model import RoughnessModel
 
@@ -111,7 +111,7 @@ def build_snapshots(surface_obj, waypoints, dwells, sigma_arr, depth_arr,
         sig = sigma_arr[i]
         dep = depth_arr[i]
         dwell = dwells[i]
-        pressure = pass_pressures[min(i // single_pass_len, num_passes - 1)]
+        pressure = float(waypoint_pressures[i])
 
         r2 = (xx - cx) ** 2 + (yy - cy) ** 2
         tif = dep * np.exp(-r2 / (2.0 * sig ** 2))
@@ -147,6 +147,36 @@ def find_snapshot_at_time(snapshots, t):
         else:
             hi = mid - 1
     return snapshots[lo]
+
+
+def interpolate_tool_position(waypoints, cum_time, t):
+    """Interpolate tool position so dwell appears as slower feed, not pauses."""
+    n = len(waypoints)
+    if n == 0:
+        return 0.0, 0.0, 0, 0.0
+    if t <= cum_time[0]:
+        return float(waypoints[0, 0]), float(waypoints[0, 1]), 0, 0.0
+    if t >= cum_time[-1]:
+        return float(waypoints[-1, 0]), float(waypoints[-1, 1]), n - 1, 1.0
+
+    seg_idx = int(np.searchsorted(cum_time, t, side="right")) - 1
+    seg_idx = max(0, min(seg_idx, n - 1))
+    next_idx = min(seg_idx + 1, n - 1)
+    t0 = cum_time[seg_idx]
+    t1 = cum_time[min(seg_idx + 1, len(cum_time) - 1)]
+    frac = 0.0 if t1 <= t0 else float((t - t0) / (t1 - t0))
+    x = (1.0 - frac) * waypoints[seg_idx, 0] + frac * waypoints[next_idx, 0]
+    y = (1.0 - frac) * waypoints[seg_idx, 1] + frac * waypoints[next_idx, 1]
+    return float(x), float(y), seg_idx, frac
+
+
+def trail_with_current_position(waypoints, idx, x, y):
+    if len(waypoints) == 0:
+        return [], []
+    idx = max(0, min(idx, len(waypoints) - 1))
+    xs = np.concatenate([waypoints[:idx + 1, 0], np.array([x])])
+    ys = np.concatenate([waypoints[:idx + 1, 1], np.array([y])])
+    return xs, ys
 
 
 def main():
@@ -189,6 +219,13 @@ def main():
     )
     single_pass_len = spiral.get_single_pass_length()
     pass_pressures = sp["pass_pressures"]
+    if "waypoint_pressures" in data:
+        waypoint_pressures = data["waypoint_pressures"].astype(float)
+    else:
+        waypoint_pressures = np.array([
+            pass_pressures[min(i // single_pass_len, sp["num_passes"] - 1)]
+            for i in range(N)
+        ], dtype=float)
 
     tif_model = TIFModel(tif_ckpt)
     speed = sp["fixed_speed"]
@@ -197,7 +234,7 @@ def main():
     sigma_arr = np.zeros(N)
     depth_arr = np.zeros(N)
     for i in range(N):
-        p = pass_pressures[min(i // single_pass_len, sp["num_passes"] - 1)]
+        p = waypoint_pressures[i]
         w, d = tif_model.predict(float(p), speed, conc)
         sigma_arr[i] = w / (2.0 * np.sqrt(2.0 * np.log(2.0)))
         depth_arr[i] = d
@@ -214,13 +251,13 @@ def main():
     surface_bl = LensSurface(sc["grid_size"], sc["lens_diameter_mm"], sc["curvature_radius_mm"])
     surface_bl.reset(error_scale=1.0, seed=42)
     snaps_bl = build_snapshots(surface_bl, wp_nominal, dwells_bl, sigma_arr, depth_arr,
-                               pass_pressures, single_pass_len, num_passes, speed, conc)
+                               waypoint_pressures, speed, conc)
 
     print("Simulating optimized ...")
     surface_opt = LensSurface(sc["grid_size"], sc["lens_diameter_mm"], sc["curvature_radius_mm"])
     surface_opt.reset(error_scale=1.0, seed=42)
     snaps_opt = build_snapshots(surface_opt, wp_opt, dwells_opt, sigma_arr, depth_arr,
-                                pass_pressures, single_pass_len, num_passes, speed, conc)
+                                waypoint_pressures, speed, conc)
 
     T_bl = snaps_bl[-1]["cum_time"]
     T_opt = snaps_opt[-1]["cum_time"]
@@ -299,9 +336,14 @@ def main():
     ax_bl.set_title("Baseline", color=COL_BL, fontsize=24, fontweight="bold", pad=12)
     ax_opt.set_title("Optimized", color=COL_OPT, fontsize=24, fontweight="bold", pad=12)
 
-    dot_bl, = ax_bl.plot([], [], "o", color=COL_BL, ms=16,
+    ax_bl.plot(wp_nominal[:, 0], wp_nominal[:, 1], "-", color="#ffffff", lw=0.5, alpha=0.18)
+    ax_opt.plot(wp_opt[:, 0], wp_opt[:, 1], "-", color="#ffffff", lw=0.5, alpha=0.18)
+    trail_bl, = ax_bl.plot([], [], "-", color=COL_BL, lw=3.0, alpha=0.95, zorder=9)
+    trail_opt, = ax_opt.plot([], [], "-", color=COL_OPT, lw=3.0, alpha=0.95, zorder=9)
+
+    dot_bl, = ax_bl.plot([], [], "o", color=COL_BL, ms=22,
                           markeredgecolor="white", markeredgewidth=2.5, zorder=10)
-    dot_opt, = ax_opt.plot([], [], "o", color=COL_OPT, ms=16,
+    dot_opt, = ax_opt.plot([], [], "o", color=COL_OPT, ms=22,
                             markeredgecolor="white", markeredgewidth=2.5, zorder=10)
 
     stat_bl = ax_bl.text(0.5, -0.06, "", transform=ax_bl.transAxes,
@@ -368,12 +410,16 @@ def main():
 
         s_bl = snaps_bl[idx_bl]
         s_opt = snaps_opt[idx_opt]
+        x_bl, y_bl, move_idx_bl, move_frac_bl = interpolate_tool_position(wp_nominal, cum_bl, t)
+        x_opt, y_opt, move_idx_opt, move_frac_opt = interpolate_tool_position(wp_opt, cum_opt, t)
 
         im_bl.set_data(np.ma.array(s_bl["error"], mask=~mask))
         im_opt.set_data(np.ma.array(s_opt["error"], mask=~mask))
 
-        dot_bl.set_data([s_bl["tool_x"]], [s_bl["tool_y"]])
-        dot_opt.set_data([s_opt["tool_x"]], [s_opt["tool_y"]])
+        dot_bl.set_data([x_bl], [y_bl])
+        dot_opt.set_data([x_opt], [y_opt])
+        trail_bl.set_data(*trail_with_current_position(wp_nominal, move_idx_bl, x_bl, y_bl))
+        trail_opt.set_data(*trail_with_current_position(wp_opt, move_idx_opt, x_opt, y_opt))
 
         stat_bl.set_text(f"RMS {s_bl['rms']:.3f} µm    Ra {s_bl.get('ra', 0):.1f} nm")
         stat_opt.set_text(f"RMS {s_opt['rms']:.3f} µm    Ra {s_opt.get('ra', 0):.1f} nm")
@@ -392,8 +438,8 @@ def main():
 
         bl_done = "  DONE" if t >= T_bl else ""
         opt_done = "  DONE" if t >= T_opt else ""
-        pct_bl = min(s_bl["wp_idx"] / N * 100, 100)
-        pct_opt = min(s_opt["wp_idx"] / N * 100, 100)
+        pct_bl = min((move_idx_bl + move_frac_bl) / N * 100, 100)
+        pct_opt = min((move_idx_opt + move_frac_opt) / N * 100, 100)
         suptitle.set_text(
             f"t = {t:.0f}s   |   "
             f"Baseline {pct_bl:.0f}%{bl_done}   ·   "

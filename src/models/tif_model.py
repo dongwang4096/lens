@@ -5,6 +5,8 @@ from process parameters (pressure, speed, concentration).
 Uses a small MLP trained on experimental data.
 """
 
+from __future__ import annotations
+
 import numpy as np
 import torch
 import torch.nn as nn

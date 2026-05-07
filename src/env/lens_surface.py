@@ -5,6 +5,8 @@ Provides target surface generation, initial error generation,
 and material removal operations.
 """
 
+from __future__ import annotations
+
 import numpy as np
 
 
@@ -61,7 +63,7 @@ class LensSurface:
         Simulates realistic grinding residuals: a thin positive baseline with
         strong localized bumps, asymmetric lobes, and mid-frequency ripple.
         Some regions are near-zero while others have 3-5x the average error.
-        This forces RL to learn spatially-adaptive dwell times.
+        This forces the optimizer to choose spatially adaptive dwell times.
         """
         from scipy.ndimage import gaussian_filter
 

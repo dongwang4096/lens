@@ -1,10 +1,11 @@
 torch
 gymnasium
-stable-baselines3
+imageio
+imageio-ffmpeg
 pandas
 openpyxl
 numpy
 scipy
 matplotlib
+opencv-python
 pyyaml
-tensorboard

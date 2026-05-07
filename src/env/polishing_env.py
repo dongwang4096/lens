@@ -1,9 +1,11 @@
-"""Gymnasium environment for multi-pass spiral lens polishing.
+"""Replay environment for multi-pass spiral lens polishing.
 
 The tool follows alternating outward/inward Archimedean spirals across
 multiple passes. Each pass uses a preset pressure (decreasing from coarse
-to fine). The RL agent only controls dwell time at each waypoint.
+to fine). External optimizers provide dwell time at each waypoint.
 """
+
+from __future__ import annotations
 
 import gymnasium as gym
 import numpy as np
@@ -24,7 +26,7 @@ class LensPolishingEnv(gym.Env):
 
     One episode = num_passes spiral passes (alternating in/out).
     Each pass uses a different preset pressure (coarse -> fine).
-    The agent decides dwell_time at every waypoint.
+    The optimizer supplies dwell_time at every waypoint.
 
     Observation (flat vector):
         - local_patch (patch_size^2): error around tool

@@ -1,7 +1,9 @@
 *.sqsh
+.venv/
 __pycache__/
 *.pyc
 src/runs/
 src/checkpoints/
+src/results/
 *.egg-info/
 .DS_Store

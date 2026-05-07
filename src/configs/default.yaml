@@ -1,4 +1,4 @@
-# === Multi-Pass Spiral + Dwell Time RL ===
+# === Multi-Pass Spiral + Traditional Dwell Optimization ===
 
 surface:
   grid_size: 128
@@ -26,22 +26,35 @@ env:
   action_ranges:
     dwell_time: [0.1, 5.0]
 
-training:
-  algorithm: SAC
-  total_timesteps: 2000000
-  learning_rate: 0.0001
-  batch_size: 256
-  buffer_size: 500000
-  learning_starts: 2000
-  gamma: 0.99
-  tau: 0.005
-  train_freq: 1
-  gradient_steps: 1
-  log_interval: 10
-  eval_freq: 5000
-  n_eval_episodes: 3
-  patience: 30
-  seed: 42
-
-policy:
-  net_arch: [256, 256, 256]
+free_path:
+  # If null, use the same waypoint count as the nominal multi-pass spiral.
+  n_waypoints:
+  n_control_points: 48
+  n_iters: 3000
+  lsq_interval: 100
+  lr: 0.01
+  # Hard-constraint optimization starts from a smooth feasible path.
+  initializer:
+    path: smooth_spiral
+    turns: 4.0
+    min_radius_mm: 0.0
+    max_radius_frac: 0.96
+  allow_infeasible_steps: false
+  projection_backtrack_steps: 8
+  max_turn_angle_deg: 10.0
+  min_turn_radius_mm: 8.0
+  motion:
+    # Effective feed speed is computed as local path distance / dwell time.
+    speed_min_mm_s: 0.05
+    speed_max_mm_s: 30.0
+    max_accel_mm_s2: 20.0
+  weights:
+    form: 5.0
+    overpolish: 10.0
+    smoothness: 0.5
+    turn: 2.0
+    turn_radius: 1.0
+    spacing: 0.2
+    radius: 100.0
+    speed: 1.0
+    accel: 0.1
